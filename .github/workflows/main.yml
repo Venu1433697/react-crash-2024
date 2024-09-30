@@ -1,4 +1,4 @@
-name: Mat CI
+name: Mart CI
 
 on:
   push:
@@ -24,8 +24,11 @@ jobs:
       
     - name: Build project 
       run: npm run build # or your specific build command
-    
 
+
+    - name: List build directory (Optional for debug)
+      run: ls -al dist
+    
     - run: tar -czf build.tar.gz dist
 
     - name: Upload build Artifact
@@ -35,33 +38,34 @@ jobs:
         path: build.tar.gz
 
 
-
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    
+    steps: 
+      - name: Checkout repository
+        uses: actions/Checkout@v4
 
-    steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v4
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifact
+          path:  dist/
 
-    - name: Download build artifact
-      uses: actions/download-artifact@v4
-      with: 
-       name: artifact
-       path: dist/
 
-    - name: Deploy via SSH
-      run: |
-        mkdir ~/.ssh
-        echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_rsa
-        chmod 600 ~/.ssh/id_rsa
+      - name: Deploy via SSH 
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+          
+          scp -i ~/.ssh/id_rsa -P ${{ secrets.SSH_PORT }} dist/build.tar.gz ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/home/ec2-user/client
 
-        ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
-
-        scp -i ~/.ssh/id_rsa -P ${{ secrets.SSH_PORT }} dist/build.tar.gz ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/home/ec2-user/venu
-
-        ssh -i ~/.ssh/id_rsa -p ${{ secretrs.SSH_PORT }} ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
-          cd /home/ec2-user/venu
-          tar -xzf build.tar.gz
-          mv build/* .
-        EOF
+          ssh -i ~/.ssh/id_rsa -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
+            cd /home/ec2-user/client
+            rm -rf *.html *.js *.css static *.json *.ico
+            tar -xzf build.tar.gz
+            mv dist/* .
+            rm -rf dist build.tar.gz
+          EOF
